@@ -1,15 +1,13 @@
-using System.Collections;
 using Unity.Netcode;
-using UnityEditor.SceneManagement;
 using UnityEngine;
 
 namespace HelloWorld
 {
-	public class HelloWorldPlayer : NetworkBehaviour
+	public class Player : NetworkBehaviour
 	{
 		public NetworkVariable<Vector3> Position = new NetworkVariable<Vector3>();
 		//[SerializeField] private PlayerUI playerUI;
-		[SerializeField] private HelloWorldManager helloWorldManager;
+		[SerializeField] private UIManagerOld helloWorldManager;
 		[SerializeField] private NetworkData networkData;
 		public NetworkData NetworkData => networkData;
 
@@ -18,22 +16,19 @@ namespace HelloWorld
 		/// </summary>
 		public override void OnNetworkSpawn()
 		{
-			if(IsOwner)
-			{
-				helloWorldManager = GameObject.Find("Hello World Manager").GetComponent<HelloWorldManager>();
-				helloWorldManager.helloWorldPlayer = this;
-
-				if (IsServer)
-				{
-					networkData = this.gameObject.AddComponent<NetworkData>();
-					networkData.TrySubmitNewPlayerName(helloWorldManager.nameDisplay.text);
-				}
-			}
-
 			Position.OnValueChanged += OnStateChanged;
 
 			if (IsOwner)
 			{
+				helloWorldManager = GameObject.Find("UI Manager").GetComponent<UIManagerOld>();
+				helloWorldManager.player = this;
+
+				if (IsServer)
+				{
+					networkData = this.gameObject.AddComponent<NetworkData>();
+					networkData.TrySubmitNewPlayerName(helloWorldManager.nameDisplayText.text);
+				}
+
 				Move();
 			}
 		}
@@ -63,7 +58,26 @@ namespace HelloWorld
 		/// </summary>
 		public void Move()
 		{
-			SubmitPositionRequestServerRpc();
+			if (IsHost)
+			{
+				var randomPosition = GetRandomPositionOnPlane();
+				transform.position = randomPosition;
+				Position.Value = randomPosition;
+			}
+			else if (IsClient)
+			{
+				SubmitPositionRequestServerRpc();
+			}
+		}
+
+		/// <summary>
+		/// Ask the server to change position of our transform.
+		/// </summary>
+		public void MoveAsServer()
+		{
+			var randomPosition = GetRandomPositionOnPlane();
+			transform.position = randomPosition;
+			Position.Value = randomPosition;
 		}
 
 		/// <summary>
@@ -91,7 +105,7 @@ namespace HelloWorld
 		public void RequestPlayerNamesServerRpc(RpcParams rpcParams = default)
 		{
 			// Get the server Net Obj => HelloWorldPlayer. GetPlayerNetworkObject() method is only valid when called on the Server
-			var serverPlayer = NetworkManager.Singleton.SpawnManager.GetPlayerNetworkObject(0).GetComponent<HelloWorld.HelloWorldPlayer>();
+			var serverPlayer = NetworkManager.Singleton.SpawnManager.GetPlayerNetworkObject(0).GetComponent<HelloWorld.Player>();
 
 			// Using our (the servers) Network Data component, retrieve the fresh list of Player Names
 			SendPlayerNamesClientRpc(serverPlayer.NetworkData.GetPlayerNames());

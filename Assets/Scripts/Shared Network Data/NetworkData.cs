@@ -39,11 +39,11 @@ public class NetworkData : MonoBehaviour
 	{
 		if (playerNames.Contains(name))
 		{
-			Debug.Log($"{name} already exists. Choose a different name!");
+			Debug.Log($"'{name}' already exists. Choose a different name!");
 			return false;
 		}
 
-		Debug.Log($"Added {name} to list of used names");
+		Debug.Log($"Added '{name}' to list of used names");
 		playerNames.Add(name);
 		return true;
 	}

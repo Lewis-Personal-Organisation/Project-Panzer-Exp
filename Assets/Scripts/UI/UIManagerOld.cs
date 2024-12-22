@@ -5,7 +5,7 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-public class HelloWorldManager : MonoBehaviour
+public class UIManagerOld : MonoBehaviour
 {
 	[SerializeField] private UIDocument uiDocument;
 	VisualElement rootVisualElement;
@@ -14,24 +14,22 @@ public class HelloWorldManager : MonoBehaviour
 	Button serverButton;
 	Button moveButton;
 	Label statusLabel;
-	private bool uiCreated = false;
 
 	[Header("Player Name Input")]
 	[SerializeField] private GameObject playerNameGroup;
 	[SerializeField] private TextMeshProUGUI inputText;
-	[SerializeField] internal TextMeshProUGUI nameDisplay;
-	[SerializeField] private Button submitButton;
+	[SerializeField] internal TextMeshProUGUI nameDisplayText;
+	[SerializeField] internal UnityEngine.UI.Button nameDisplayButton;
+	[SerializeField] private UnityEngine.UI.Button submitButton;
 
-	public HelloWorldPlayer helloWorldPlayer;
+	public Player player;
 	[SerializeField] private ConnectionHandler connectionHandler;
 
 
-	void Update()
+	private void Start()
 	{
-		TakeKeyboardInput();
-
-		if (uiCreated)
-			UpdateUI();
+		CreateVisualDisplay();
+		ToggleVEDisplay(false);
 	}
 
 	void OnDisable()
@@ -40,6 +38,13 @@ public class HelloWorldManager : MonoBehaviour
 		clientButton.clicked -= connectionHandler.OnClientButtonClicked;
 		serverButton.clicked -= connectionHandler.OnServerButtonClicked;
 		moveButton.clicked -= SubmitNewPosition;
+	}
+
+	void Update()
+	{
+		TakeKeyboardInput();
+
+		UpdateUI();
 	}
 
 	/// <summary>
@@ -66,14 +71,13 @@ public class HelloWorldManager : MonoBehaviour
 		clientButton.clicked += connectionHandler.OnClientButtonClicked;
 		serverButton.clicked += connectionHandler.OnServerButtonClicked;
 		moveButton.clicked += SubmitNewPosition;
-		uiCreated = true;
 	}
 
 	/// <summary>
 	/// Show or Hide the Visual Element display
 	/// </summary>
 	/// <param name="enable"></param>
-	private void ToggleVEDisplay(bool enable)
+	public void ToggleVEDisplay(bool enable)
 	{
 		rootVisualElement.style.display = enable == true ? DisplayStyle.Flex : DisplayStyle.None;
 		rootVisualElement.SetEnabled(enable);
@@ -88,6 +92,11 @@ public class HelloWorldManager : MonoBehaviour
 			{
 				string temp = inputText.text + chr;
 				inputText.text = temp;
+			}
+			// If Char is any return key, attempt to submit name
+			else if (chr == '\r' && inputText.text.Length > 0)
+			{
+				SubmitName();
 			}
 			// If char is backspace and we have minimum 1 char, remove char
 			else if (chr == '\b' && inputText.text.Length > 0) 
@@ -110,9 +119,10 @@ public class HelloWorldManager : MonoBehaviour
 			return;
 		}
 
-		nameDisplay.text = inputText.text;
+		ToggleVEDisplay(true);
+		nameDisplayText.text = inputText.text;
+		nameDisplayText.gameObject.SetActive(true);
 		connectionHandler.SetConnectionData(System.Text.Encoding.ASCII.GetBytes(inputText.text));
-		//NetworkManager.Singleton.NetworkConfig.ConnectionData = System.Text.Encoding.ASCII.GetBytes(inputText.text);
 
 		// If we have previously disconnected, we should auto-join as client when we submit
 		if (connectionHandler.previousConnectAttemptRejected)
@@ -122,7 +132,6 @@ public class HelloWorldManager : MonoBehaviour
 		else
 		{
 			playerNameGroup.SetActive(false);
-			CreateVisualDisplay();
 		}
 	}
 
@@ -210,26 +219,27 @@ public class HelloWorldManager : MonoBehaviour
 		if (NetworkManager.Singleton.IsServer && !NetworkManager.Singleton.IsClient)
 		{
 			foreach (ulong uid in NetworkManager.Singleton.ConnectedClientsIds)
-			{
-				var playerObject = NetworkManager.Singleton.SpawnManager.GetPlayerNetworkObject(uid);
-				var player = playerObject.GetComponent<HelloWorld.HelloWorldPlayer>();
-				player.Move();
-			}
+				NetworkManager.Singleton.SpawnManager.GetPlayerNetworkObject(uid).GetComponent<HelloWorld.Player>().Move();
 		}
 		else if (NetworkManager.Singleton.IsClient)
 		{
-			Debug.Log("Client should print this");
-			var playerObject = NetworkManager.Singleton.SpawnManager.GetLocalPlayerObject();
-			var player = playerObject.GetComponent<HelloWorld.HelloWorldPlayer>();
-			player.Move();
+			NetworkManager.Singleton.SpawnManager.GetLocalPlayerObject().GetComponent<HelloWorld.Player>().Move();
 		}
 	}
 
-	public void UpdateUIOnDisconnect()
+	public void UpdateUIOnDisconnect(bool usernameInvalid)
 	{
-		ToggleVEDisplay(false);
-		playerNameGroup.SetActive(true);
-		nameDisplay.text = string.Empty;
-		inputText.text = string.Empty;
+		if (usernameInvalid)
+		{
+			ToggleVEDisplay(false);
+			playerNameGroup.SetActive(true);
+			nameDisplayText.text = string.Empty;
+			inputText.text = string.Empty;
+		}
+		else
+		{
+			ToggleVEDisplay(true);
+			playerNameGroup.SetActive(false);
+		}
 	}
 }

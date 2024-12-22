@@ -4,20 +4,31 @@ using UnityEngine;
 
 public class ConnectionHandler : MonoBehaviour
 {
-	[SerializeField] private HelloWorldManager helloWorldManager;
-	[SerializeField] private byte[] connectionData;
+	[SerializeField] private UIManagerOld UIManager;
+	[SerializeField] private byte[] cachedConnectionData;
 	public bool previousConnectAttemptRejected = false;
+
+	private enum ConnectionErrorTypes
+	{
+		PlayerCapacityReached,
+		UsernameTaken,
+		NotImplemented
+	}
+
 
 	public void SetConnectionData(byte[] connectionData)
 	{
-		this.connectionData = connectionData;
-		NetworkManager.Singleton.NetworkConfig.ConnectionData = this.connectionData;
+		this.cachedConnectionData = connectionData;
+		NetworkManager.Singleton.NetworkConfig.ConnectionData = this.cachedConnectionData;
 	}
 
 	public void OnHostButtonClicked()
 	{
 		NetworkManager.Singleton.ConnectionApprovalCallback = ApprovalCheck;
 		NetworkManager.Singleton.StartHost();
+		Debug.Log($"Successfully joined as Host");
+
+		UIManager.nameDisplayButton.enabled = false;
 	}
 	public void OnServerButtonClicked() => NetworkManager.Singleton.StartServer();
 
@@ -34,7 +45,7 @@ public class ConnectionHandler : MonoBehaviour
 		var newPlayerData = System.Text.Encoding.ASCII.GetString(request.Payload);
 
 		bool initialClient = request.ClientNetworkId == 0;
-		Debug.Log($"Request as {(initialClient ? "Server" : "Client")} with ID {request.ClientNetworkId}. Payload: {newPlayerData}");
+		Debug.Log($"Request as {(initialClient ? "Server" : "Client")} with ID {request.ClientNetworkId}. Data: {newPlayerData}");
 
 		bool joinApproved = false;
 
@@ -46,14 +57,14 @@ public class ConnectionHandler : MonoBehaviour
 		}
 		else
 		{
-			HelloWorldPlayer serverPlayer = NetworkManager.Singleton.SpawnManager.GetLocalPlayerObject().GetComponent<HelloWorldPlayer>();
+			Player serverPlayer = NetworkManager.Singleton.SpawnManager.GetLocalPlayerObject().GetComponent<Player>();
 
 			// If response.Approved is false, you can provide a message that explains the reason why via ConnectionApprovalResponse.Reason
 			// On the client-side, NetworkManager.DisconnectReason will be populated with this message via DisconnectReasonMessage
 			if (serverPlayer.NetworkData.ServerAtPlayerCapacity())
-				response.Reason = $"SERVER: Access Denied - Max Players Reached ({serverPlayer.NetworkData.GetCurrentCapacity})";
+				response.Reason = $"(E{(int)ConnectionErrorTypes.PlayerCapacityReached}): Session Access Denied - Max Players Reached ({serverPlayer.NetworkData.GetCurrentCapacity}) ";
 			else if (!serverPlayer.NetworkData.TrySubmitNewPlayerName(newPlayerData))
-				response.Reason = $"SERVER: Access Denied - Player Name already taken)";
+				response.Reason = $"(E{(int)ConnectionErrorTypes.UsernameTaken}) Session Access Denied - Player Name already taken ";
 			else
 				joinApproved = true;
 		}
@@ -74,23 +85,28 @@ public class ConnectionHandler : MonoBehaviour
 		response.Pending = false;
 	}
 
+	/// <summary>
+	/// Callback for when a client connects
+	/// </summary>
 	private void OnClientConnectedCallback(ulong obj)
 	{
 		if (NetworkManager.Singleton.IsServer && !NetworkManager.Singleton.IsClient)
 		{
-			Debug.Log($"Successfully joined as Server and Client");
 		}
 		else if (NetworkManager.Singleton.IsClient)
 		{
-			if (helloWorldManager.helloWorldPlayer)
+			UIManager.nameDisplayButton.enabled = false;
+
+			if (UIManager.player)
 			{
 				Debug.Log($"Our Player is assigned. Calling Player Method for Names");
-				helloWorldManager.helloWorldPlayer.RequestPlayerNamesServerRpc();
+				UIManager.player.RequestPlayerNamesServerRpc();
 			}
 		}
 
 		previousConnectAttemptRejected = false;
-		helloWorldManager.TogglePlayerNameGroup(false); //playerNameGroup.SetActive(false);
+		UIManager.TogglePlayerNameGroup(false);
+		UIManager.ToggleVEDisplay(true);
 	}
 
 	private void OnClientDisconnectCallback(ulong obj)
@@ -100,9 +116,20 @@ public class ConnectionHandler : MonoBehaviour
 
 		if (!NetworkManager.Singleton.IsServer && NetworkManager.Singleton.DisconnectReason != string.Empty)
 		{
-			Debug.Log($"Failed to join Server: {NetworkManager.Singleton.DisconnectReason}");
+			Debug.Log($"Join Failed: {NetworkManager.Singleton.DisconnectReason}");
+
+			UIManager.UpdateUIOnDisconnect(FilterConnectionError(NetworkManager.Singleton.DisconnectReason) == ConnectionErrorTypes.UsernameTaken);
 			previousConnectAttemptRejected = true;
-			helloWorldManager.UpdateUIOnDisconnect();
 		}
+	}
+
+	private ConnectionErrorTypes FilterConnectionError(string error)
+	{
+		return error switch
+		{
+			string s when s.StartsWith("(E0)") => ConnectionErrorTypes.PlayerCapacityReached,
+			string s when s.StartsWith("(E1)") => ConnectionErrorTypes.UsernameTaken,
+			_ => ConnectionErrorTypes.NotImplemented,
+		};
 	}
 }
