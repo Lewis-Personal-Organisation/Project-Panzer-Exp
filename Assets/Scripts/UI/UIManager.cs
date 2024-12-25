@@ -13,11 +13,14 @@ using UnityEngine.UI;
 
 public class UIManager : MonoBehaviour
 {
+	[Header("Session")]
+	[SerializeField] private SessionManager sessionManager;
+
 	[Header("Lobby Data")]
 	[SerializeField] UnityTransport unityTransport;
 	[SerializeField] private bool isLobbyPrivate;
 	string lobbyDisplayName = "";
-	string hostLobbyName;
+	[SerializeField] string hostLobbyName = "";
 	public int maxPlayers = 4;
 	public string relayJoinCode = string.Empty;
 	public bool networkInitialised = false;
@@ -27,8 +30,8 @@ public class UIManager : MonoBehaviour
 	[SerializeField] private GameObject playerNameGroup;
 	[SerializeField] private TextMeshProUGUI inputText;
 	[SerializeField] internal TextMeshProUGUI nameDisplayText;
-	[SerializeField] internal UnityEngine.UI.Button nameDisplayButton;
-	[SerializeField] private UnityEngine.UI.Button submitButton;
+	[SerializeField] internal Button nameDisplayButton;
+	[SerializeField] private Button submitButton;
 
 	[Header("Game Connection")]
 	[SerializeField] private GameObject inaccessableBackgroundObject;
@@ -42,6 +45,7 @@ public class UIManager : MonoBehaviour
 	[SerializeField] private Button privateButton;
 	[SerializeField] private Button publicButton;
 	[SerializeField] private Button confirmButton;
+	[SerializeField] private Button closeLobbyButton;
 
 	// The callback for Update method
 	private UnityAction OnUpdate;
@@ -56,6 +60,7 @@ public class UIManager : MonoBehaviour
 		privateButton.onClick.AddListener(delegate { SetHostLobbyVisiblity(false); });
 		publicButton.onClick.AddListener(delegate { SetHostLobbyVisiblity(true); });
 		confirmButton.onClick.AddListener(OnHostConfirmLobbyPressed);
+		closeLobbyButton.onClick.AddListener(OnHostCloseLobbyPressed);
 
 		TogglePlayerNameGroup(true);
 	}
@@ -71,8 +76,7 @@ public class UIManager : MonoBehaviour
 		ToggleHostLobbyPanel(true);
 		publicButton.Select();
 		isLobbyPrivate = false;
-		lobbyDisplayName = $"{nameDisplayText.text}'s Test Lobby";
-		gameNameText.text = lobbyDisplayName;
+		gameNameText.text = $"{nameDisplayText.text}'s Lobby";
 	}
 
 	public void OnJoinPrivateGameButtonPressed()
@@ -91,14 +95,26 @@ public class UIManager : MonoBehaviour
 		publicButton.interactable = false;
 		confirmButton.interactable = false;
 
+		await sessionManager.Initialise();
+
+		Debug.Log("Session Manager initialised Successfully");
+
 		relayJoinCode = await InitializeHost(maxPlayers);
 		if (this == null) return;
 
-		Lobby lobby = await LobbyManager.instance.CreateLobby(hostLobbyName, maxPlayers, playerName, isLobbyPrivate, relayJoinCode);
+		Lobby lobby = await LobbyManager.instance.CreateLobby(gameNameText.text, maxPlayers, playerName, isLobbyPrivate, relayJoinCode);
 		if (this == null ) return;
 
-
+		closeLobbyButton.gameObject.SetActive(true);
+		closeLobbyButton.interactable = true;
 	}
+
+	private async void OnHostCloseLobbyPressed()
+	{
+		await LobbyManager.instance.DeleteAnyActiveLobbyWithNotify();
+		closeLobbyButton.gameObject.SetActive(false);
+	}
+
 
 	/// <summary>
 	/// Submit name entered by the user. If its empty, return. Else, set as our displayed name and Connection Data for joining a server
